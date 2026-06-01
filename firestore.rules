@@ -1,0 +1,167 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Pillar 8 & Pillar 1)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- REUSABLE PRIMITIVES & IDENTITY HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true || 
+        request.auth.token.firebase.sign_in_provider == 'google.com'
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role-based helper fetching directly from database (Avoids client claims)
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // --- COLLECTION VALIDATION BLUEPRINTS (Pillar 2) ---
+
+    function isValidMemberProfile(data) {
+      return data.keys().hasAll(['uid', 'role', 'name', 'email', 'status', 'totalDPSPaid']) &&
+        data.uid is string && data.uid.size() <= 128 &&
+        data.role is string && (data.role == 'admin' || data.role == 'member') &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() <= 150 &&
+        data.status is string && (data.status == 'pending_kyc' || data.status == 'active' || data.status == 'suspended') &&
+        data.totalDPSPaid is number && data.totalDPSPaid >= 0 &&
+        (!data.keys().contains('phone') || (data.phone is string && data.phone.size() <= 20)) &&
+        (!data.keys().contains('nid') || (data.nid is string && data.nid.size() <= 30)) &&
+        (!data.keys().contains('birthDate') || (data.birthDate is string && data.birthDate.size() <= 20)) &&
+        (!data.keys().contains('bloodGroup') || (data.bloodGroup is string && data.bloodGroup.size() <= 5)) &&
+        (!data.keys().contains('gender') || (data.gender is string && data.gender.size() <= 15)) &&
+        (!data.keys().contains('smoker') || (data.smoker is bool)) &&
+        (!data.keys().contains('chronicIllness') || (data.chronicIllness is string && data.chronicIllness.size() <= 1000)) &&
+        (!data.keys().contains('height') || (data.height is number)) &&
+        (!data.keys().contains('weight') || (data.weight is number)) &&
+        (!data.keys().contains('nomineesJson') || (data.nomineesJson is string && data.nomineesJson.size() <= 5000)) &&
+        (!data.keys().contains('joinedAt') || (data.joinedAt is string))
+      ;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'memberId', 'memberName', 'amount', 'monthYear', 'gateway', 'transactionId', 'submittedAt', 'status']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.memberId is string && data.memberId.size() <= 128 &&
+        data.memberName is string && data.memberName.size() <= 100 &&
+        data.amount is number && data.amount > 0 &&
+        data.monthYear is string && data.monthYear.size() <= 50 &&
+        data.gateway is string && data.gateway.size() <= 50 &&
+        data.transactionId is string && data.transactionId.size() <= 100 &&
+        data.submittedAt is string &&
+        data.status is string && (data.status == 'pending' || data.status == 'approved' || data.status == 'rejected') &&
+        (!data.keys().contains('approvedBy') || (data.approvedBy is string && data.approvedBy.size() <= 128)) &&
+        (!data.keys().contains('approvalNotes') || (data.approvalNotes is string && data.approvalNotes.size() <= 1000)) &&
+        (!data.keys().contains('approvedAt') || (data.approvedAt is string))
+      ;
+    }
+
+    function isValidInvestment(data) {
+      return data.keys().hasAll(['id', 'title', 'amount', 'expectedReturnRate', 'startDate', 'status', 'currentValuation']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.title is string && data.title.size() <= 200 &&
+        data.amount is number && data.amount >= 0 &&
+        data.expectedReturnRate is number &&
+        data.startDate is string &&
+        data.status is string && (data.status == 'active' || data.status == 'liquidated') &&
+        data.currentValuation is number &&
+        (!data.keys().contains('maturityDate') || (data.maturityDate is string)) &&
+        (!data.keys().contains('category') || (data.category is string && data.category.size() <= 100))
+      ;
+    }
+
+    function isValidNotice(data) {
+      return data.keys().hasAll(['id', 'title', 'content', 'category', 'createdAt', 'authorName', 'isPinned']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.title is string && data.title.size() <= 200 &&
+        data.content is string && data.content.size() <= 10000 &&
+        data.category is string && (data.category == 'announcement' || data.category == 'emergency' || data.category == 'meeting' || data.category == 'financial') &&
+        data.createdAt is string &&
+        data.authorName is string && data.authorName.size() <= 100 &&
+        data.isPinned is bool
+      ;
+    }
+
+    // --- SECURED ROUTING & RULES ---
+
+    // 1. Members / KYC Collection (Pillar 6: Isolated PII Reads)
+    match /members/{memberId} {
+      allow create: if isSignedIn() && isValidId(memberId) && 
+        isValidMemberProfile(incoming()) && (isOwner(memberId) || isAdmin());
+      
+      // Reading profile of other family members is allowed only for name/email metrics, 
+      // but detailed medical history (PII) gets read either by the Owner OR the Finance Admin.
+      allow get, list: if isSignedIn() && (isOwner(memberId) || isAdmin());
+
+      allow update: if isSignedIn() && isValidId(memberId) && isValidMemberProfile(incoming()) && (
+        // Action A: Member updates their own basic info and KYC
+        (isOwner(memberId) && incoming().role == existing().role && incoming().totalDPSPaid == existing().totalDPSPaid && 
+         incoming().diff(existing()).affectedKeys().hasOnly([
+           'name', 'phone', 'nid', 'birthDate', 'bloodGroup', 'gender', 'smoker', 'chronicIllness', 'height', 'weight', 'nomineesJson'
+         ])) ||
+        // Action B: Finance Team registers payment totals or alters roles/status
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasAny(['role', 'status', 'totalDPSPaid']))
+      );
+
+      allow delete: if isAdmin() && isValidId(memberId);
+    }
+
+    // 2. Transactions Collection (Pillar 7: Atomic/Write Guarding)
+    match /transactions/{transactionId} {
+      allow create: if isSignedIn() && isValidId(transactionId) && 
+        isValidTransaction(incoming()) && (incoming().memberId == request.auth.uid || isAdmin());
+
+      allow list: if isSignedIn() && (isAdmin() || resource.data.memberId == request.auth.uid);
+      allow get: if isSignedIn() && (isAdmin() || resource.data.memberId == request.auth.uid);
+
+      allow update: if isSignedIn() && isValidId(transactionId) && isValidTransaction(incoming()) && (
+        // Members can update/resubmit if rejection occurred or if edit of pending submission
+        (existing().memberId == request.auth.uid && existing().status == 'pending' && incoming().status == 'pending' &&
+         incoming().diff(existing()).affectedKeys().hasAny(['amount', 'gateway', 'transactionId', 'monthYear'])) ||
+        // Admin approves or rejects transaction
+        (isAdmin() && incoming().memberId == existing().memberId && incoming().amount == existing().amount &&
+         incoming().diff(existing()).affectedKeys().hasAny(['status', 'approvedBy', 'approvalNotes', 'approvedAt']))
+      );
+
+      allow delete: if isAdmin() && isValidId(transactionId);
+    }
+
+    // 3. Investments Collection (Finance Admin Authorized)
+    match /investments/{investmentId} {
+      allow read: if isSignedIn(); // All logged in members can read investments (Dashboard transparency)
+      allow write: if isAdmin() && isValidId(investmentId) && isValidInvestment(incoming());
+    }
+
+    // 4. Noticeboard Collection (Public Dashboard Notices)
+    match /notices/{noticeId} {
+      allow read: if isSignedIn(); // All members can read notice boards
+      allow write: if isAdmin() && isValidId(noticeId) && isValidNotice(incoming());
+    }
+  }
+}

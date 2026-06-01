@@ -1,0 +1,8 @@
+{
+  "name": "Amader Shopno Family Fund",
+  "description": "Amader Shopno Family Fund - A comprehensive dashboard tracking monthly DPS collections, active business investments, noticeboard publications, and secure KYC profile details for a family fund.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

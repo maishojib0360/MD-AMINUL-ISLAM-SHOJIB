@@ -1,0 +1,241 @@
+{
+  "entities": {
+    "MemberProfile": {
+      "title": "MemberProfile",
+      "description": "Family fund member profile with KYC, insurance and lifestyle information.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique user ID matching Google Auth or custom key."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "member"],
+          "description": "Role determining access levels: admin (Finance Team) or regular member."
+        },
+        "name": {
+          "type": "string",
+          "description": "Full formal name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Mobile phone number."
+        },
+        "nid": {
+          "type": "string",
+          "description": "10 or 17-digit National ID number."
+        },
+        "birthDate": {
+          "type": "string",
+          "description": "Date of birth in YYYY-MM-DD format."
+        },
+        "bloodGroup": {
+          "type": "string",
+          "enum": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+          "description": "Blood group code."
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["Male", "Female", "Other"],
+          "description": "Gender classification."
+        },
+        "smoker": {
+          "type": "boolean",
+          "description": "Socio-medical smoker status."
+        },
+        "chronicIllness": {
+          "type": "string",
+          "description": "Lists of diagnosed illnesses (e.g., Diabetes, Hypertension)."
+        },
+        "height": {
+          "type": "number",
+          "description": "Height in centimeters."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Weight in kilograms."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending_kyc", "active", "suspended"],
+          "description": "Membership status within the 50-member family limit."
+        },
+        "nomineesJson": {
+          "type": "string",
+          "description": "JSON serialized string of multiple Nominees (Name, Relation, NID, Share %)."
+        },
+        "joinedAt": {
+          "type": "string",
+          "description": "ISO timestamp of joining the fund."
+        },
+        "totalDPSPaid": {
+          "type": "number",
+          "description": "Aggregated historical DPS payments approved by finance team in BDT."
+        }
+      },
+      "required": ["uid", "role", "name", "email", "status", "totalDPSPaid"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A payment submission slip for monthly DPS, pending admin verification and approval.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique transaction key."
+        },
+        "memberId": {
+          "type": "string",
+          "description": "References the UID in MemberProfile."
+        },
+        "memberName": {
+          "type": "string",
+          "description": "Cached member name."
+        },
+        "amount": {
+          "type": "number",
+          "description": "Deposited amount in BDT."
+        },
+        "monthYear": {
+          "type": "string",
+          "description": "The specific month for DPS (e.g., June 2026)."
+        },
+        "gateway": {
+          "type": "string",
+          "description": "Deposit interface (bKash, Nagad, Bank Transfer, cash)."
+        },
+        "transactionId": {
+          "type": "string",
+          "description": "Deposit receipt or transaction ID from gateway."
+        },
+        "submittedAt": {
+          "type": "string",
+          "description": "ISO submission timestamp."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"],
+          "description": "Finance team approval state."
+        },
+        "approvedBy": {
+          "type": "string",
+          "description": "UID of the Admin who approved/rejected."
+        },
+        "approvalNotes": {
+          "type": "string",
+          "description": "Notes explaining approval or rejection."
+        },
+        "approvedAt": {
+          "type": "string",
+          "description": "ISO verification timestamp."
+        }
+      },
+      "required": ["id", "memberId", "memberName", "amount", "monthYear", "gateway", "transactionId", "submittedAt", "status"]
+    },
+    "Investment": {
+      "title": "Investment",
+      "description": "Active asset deployment of the Family capital (Sanchayapatra, FDRs, Gold, Loans).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique investment key."
+        },
+        "title": {
+          "type": "string",
+          "description": "Descriptive title of the investment."
+        },
+        "amount": {
+          "type": "number",
+          "description": "Principal amount deployed from database capital."
+        },
+        "expectedReturnRate": {
+          "type": "number",
+          "description": "Annual return percentage."
+        },
+        "startDate": {
+          "type": "string",
+          "description": "Deployed date."
+        },
+        "maturityDate": {
+          "type": "string",
+          "description": "Maturity timeframe or Ongoing."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "liquidated"],
+          "description": "Active status of deployment."
+        },
+        "currentValuation": {
+          "type": "number",
+          "description": "Current appraised net asset value in BDT."
+        },
+        "category": {
+          "type": "string",
+          "description": "Classification group."
+        }
+      },
+      "required": ["id", "title", "amount", "expectedReturnRate", "startDate", "status", "currentValuation"]
+    },
+    "Notice": {
+      "title": "Notice",
+      "description": "Official notice board briefings pinned by the Finance Team.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique notice identifier."
+        },
+        "title": {
+          "type": "string",
+          "description": "Header title of the briefing."
+        },
+        "content": {
+          "type": "string",
+          "description": "Briefing message."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["announcement", "emergency", "meeting", "financial"],
+          "description": "Information level."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO creation rate."
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Published admin."
+        },
+        "isPinned": {
+          "type": "boolean",
+          "description": "If notice displays anchored."
+        }
+      },
+      "required": ["id", "title", "content", "category", "createdAt", "authorName", "isPinned"]
+    }
+  },
+  "firestore": {
+    "/members/{memberId}": {
+      "schema": "MemberProfile",
+      "description": "Store profiles and medical/Nominee KYC records of the 50 members."
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Store DPS payments submitted by members for finance verification."
+    },
+    "/investments/{investmentId}": {
+      "schema": "Investment",
+      "description": "Fund deployment ledger for active business or banking investments."
+    },
+    "/notices/{noticeId}": {
+      "schema": "Notice",
+      "description": "Family billboard notices."
+    }
+  }
+}
